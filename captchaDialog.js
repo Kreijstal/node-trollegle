@@ -7,7 +7,8 @@ function CaptchaDialog(site,id){
  this.incorrect=false;
 }
 CaptchaDialog.prototype.getImageUrl=function(){
-if(this.challenge==null)throw new Error("There is no challenge!")
+    console.log(this.challenge);
+if(this.challenge==null)throw new Error("There is no challenge!");
 return this.server + "image?c=" + this.challenge 
 }
 CaptchaDialog.prototype.update=function() {
@@ -19,9 +20,9 @@ CaptchaDialog.prototype.update=function() {
         return new Promise(function(resolve,reject){
         request(conn, function(err, res, body) {
         var regexResult=body.match(/challenge\s*:\s*'([^']*?)'[\w\W]+?is_incorrect\s*:\s*([^,]+)/);
-        console.log(body,regexResult,"AAA")
         this.challenge=regexResult[1];
-        this.is_incorrect=regexResult[1]==="true";
+        console.log(regexResult[1],"AAA");
+        this.is_incorrect=regexResult[2]==="true";
         resolve();
             })
             })
