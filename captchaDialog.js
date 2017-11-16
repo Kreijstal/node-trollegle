@@ -14,7 +14,7 @@ CaptchaDialog.prototype.update=function() {
         //System.out.println("update invoked");
         this.challenge = null;
         var conn = {
-                url: (server + "challenge?k=" + site + "&ajax=1&cachestop=" + Math.random())
+                url: (this.server + "challenge?k=" + this.site + "&ajax=1&cachestop=" + Math.random())
             };
         return new Promise(function(resolve,reject){
         request(conn, function(err, res, body) {
