@@ -312,7 +312,7 @@ var json=JSON.parse(body)
                 if (Array.isArray(json)) {
                     that.handleEventsReply(json);
                     setTimeout(that.handleEvents.bind(that), 150);
-                }else{console.log("this loop is OVER")}
+                }else{that.callback("close","polling is over")}
             }).form({ id: that.id });
 
         });
