@@ -6,7 +6,7 @@ function CaptchaDialog(site,id){
  this.id=id;
  this.incorrect=false;
 }
-CaptchaDialog.prototype.getImageUrl(){
+CaptchaDialog.prototype.getImageUrl=function(){
 if(this.challenge==null)throw new Error("There is no challenge!")
 return this.server + "image?c=" + this.challenge 
 }
