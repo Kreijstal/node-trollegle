@@ -2,3 +2,5 @@ node_modules
 .*
 client/
 workbot.js
+npm*
+package-lock.json
