@@ -60,7 +60,7 @@ function workshopBot(chatbot, omeglebot) {
       });
 	  if(inp){
       var c = that.stream.connect();
-	  debugger;
+	//  debugger;
       c.on('out', function(msg) {
         var message, user;
         if (typeof msg == 'string') {
