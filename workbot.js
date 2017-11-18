@@ -59,8 +59,9 @@ function workshopBot(chatbot, omeglebot) {
         that.send('(omegle)' + message);
       });
 	  if(inp){
-      var c = that.connect();
-      c.on('in', function(msg) {
+      var c = that.stream.connect();
+	  debugger;
+      c.on('out', function(msg) {
         var message, user;
         if (typeof msg == 'string') {
           message = msg;
@@ -220,10 +221,11 @@ var chatbot = (function() {
     chatbotExport = {
       createCommand: createCommand,
       commands: commands,
-      session: function() {
-	  var asdf=new eventualIO(function(query){read(query, asdf)})
-	  
-        return Object.assign(asdf,{bot: chatbotExport, send: function(t) { write(t, this)}});
+      session: function(stream) {
+	  var streamC=stream.connect();
+	  var asdf={bot: chatbotExport,send:function(data) {streamC.in(data)},stream:stream}
+	  streamC.on("out",function(data){read(data,asdf)})
+        return asdf;
       }
     };
 
@@ -250,14 +252,6 @@ var chatbot = (function() {
     }
   }
 
-  function write(a, session) {
-    if (!(session && session.out)) {
-      console.error('Output not set');
-      return;
-    }
-    else session.out(a);
-  }
-
   function callCommand(command, parameters, session) {
     var result,
       d = commands[command];
@@ -280,7 +274,7 @@ var chatbot = (function() {
 }());
 var omegleBot = (function() {
   function write(t) {
-    this.context&&this.context.sendMessage(t)
+    omegleConversation.context&&omegleConversation.context.sendMessage(t)
   }
   var userConnection = require('./userConnection.js');
   var omegleConversation = new eventualIO(write);
@@ -374,7 +368,7 @@ function initializing() {
 
 
   //"connecting" to the chatbot
-  var ircChatbotConnection = chatbot.session().connect();
+  
   var irc=(function(){var irc = require('irc');
   var client = new irc.Client('irc.canternet.org', 'RainBot', {
     channels: ['#rgb'],
@@ -387,10 +381,9 @@ function initializing() {
   client.addListener('error', function(message) {
     console.log('error: ', message);
   });
-  return ircio.connect();
+  return ircio;
 }())
-  irc.pipe(ircChatbotConnection);
-  ircChatbotConnection.pipe(irc);
+  chatbot.session(irc);
   /*var login = require("facebook-chat-api");
 
   // Create simple echo bot 
