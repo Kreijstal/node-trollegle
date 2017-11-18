@@ -1,10 +1,6 @@
 node_modules
 .*
 client/
-<<<<<<< HEAD
-workbot.js
-=======
 credentials.json
->>>>>>> ecfde5574c592fd83b27ac478bafcd83091bf7c9
 npm*
 package-lock.json
