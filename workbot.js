@@ -48,7 +48,7 @@ function workshopBot(chatbot, omeglebot) {
       }]);
     }
 
-    function bindOmegleWithChatbot() {
+    function bindOmegleWithChatbot(inp) {
       if (that.omeglebotC) {
         that.send('There is already a current omegle connection! Close this one first.'); //Or use multi user o.o
         return false
@@ -58,7 +58,8 @@ function workshopBot(chatbot, omeglebot) {
       that.omeglebotC.event.on('out', function(message) {
         that.send('(omegle)' + message);
       });
-      var c = that.eventualIO.connect();
+	  if(inp){
+      var c = that.connect();
       c.on('in', function(msg) {
         var message, user;
         if (typeof msg == 'string') {
@@ -72,9 +73,10 @@ function workshopBot(chatbot, omeglebot) {
         if (message.indexOf('(omegle)') !== 0)
           that.omeglebotC.event.in((user ? '<' + user + '>' : '') + message);
       });
+	  }
 
       that.omeglebotC.event.on('close', function() {
-        c.close();
+       if(inp){ c.close();}
         that.state.consumeEvent("disconnect");
         that.omeglebotC = null;
       });
@@ -84,23 +86,17 @@ function workshopBot(chatbot, omeglebot) {
       switch (command) {
         case 'restart':
           that.omeglebotC.disconnect()
-          if (bindOmegleWithChatbot()) {
+          if (bindOmegleWithChatbot(true)) {
             var regexResult = rest.match(/(?:(spy)(?: |$))?(?:lang=(.{2})(?: |$))?(.*)/);
             that.omeglebotC.startConversation(regexResult[1] == "spy", regexResult[2], regexResult[3] && regexResult[3].split(','));
           }
           break;
         case 'cap':
-
           that.omeglebotC.cap()
-
           break;
-
         case 'solve':
-
           that.omeglebotC.send(rest)
-
           break;
-
         case 'stop':
           that.omeglebotC.disconnect()
           break;
@@ -112,13 +108,13 @@ function workshopBot(chatbot, omeglebot) {
       switch (command) {
         case 'restart':
         case 'start':
-          if (bindOmegleWithChatbot()) {
+          if (bindOmegleWithChatbot(true)) {
             var regexResult = rest.match(/(?:(spy)(?: |$))?(?:lang=(.{2})(?: |$))?(.*)/);
             that.omeglebotC.startConversation(regexResult[1] == "spy", regexResult[2], regexResult[3] && regexResult[3].split(','));
           }
           break;
         case 'ask':
-          if (bindOmegleWithChatbot()) {
+          if (bindOmegleWithChatbot(false)) {
             var regexResult = rest.match(/(?:(.*?))?(?:lang=(.{2}))?$/)
             that.omeglebotC.ask(regexResult[1], regexResult[2]);
           }
@@ -140,23 +136,30 @@ function multibotConnection() {
 
 //I have no idea how it got so big; you don't have to read this if you don't want to...
 //Giving input receiving output throgh events.
-function eventualIO(ioHandler) {
+function eventualIO(input) {
   var that = this;
   this.connections = [];
-  var eventTypes = ['out', 'err', 'close', 'connect', 'in'];
+  this.fire = function(event,data) { this[event](data) }//deprecated?
+  this.input = function(inp) {
+    this.fire("in",inp);
+    input(inp);
+  };
+}
+eventualIO.fromFunction=function(func){
+var e=new eventualIO(write);
+function write(data){e.out(func(data))}
+return e.connect();
+}
+(function(){
+var eventTypes = ['out', 'err', 'close', 'connect', 'in'];
   eventTypes.forEach(function(event) {
-    ioHandler[event] = function(d) {
-      that.connections.forEach(function(each) {
+    eventualIO.prototype[event] = function(d) {
+      this.connections.forEach(function(each) {
         each.fire(event, d);
       });
     };
   });
-  ioHandler.eventualIO = this;
-  this.fire = function(event) { ioHandler[event]() }
-  this.input = function(inp) {
-    ioHandler.write(inp);
-  };
-}
+}())
 eventualIO.prototype.connect = function() {
   var con = new eventualIOconnection(this, {})
   this.connections.push(con);
@@ -177,6 +180,27 @@ eventualIOconnection.prototype.on = function(event, callback) {
     this.listeners[event].splice(this.listeners[event].indexOf(callback), 1);
   };
 };
+//callback will be called like the map function, the input of 1 stream will be the arguments of the callback and whatever the callback returns will be the output of the other stream
+eventualIOconnection.prototype.pipe = function(stream){
+if(typeof stream==="function"){
+stream=eventualIO.fromFunction(stream);
+}
+this.on("out",function(output){
+ stream.in(output);
+})
+stream.on("close",function(){this.close()});
+return stream;
+}
+
+eventualIOconnection.prototype.bind = function(stream){
+if(stream.constructor==this.constructor){
+try{
+this.pipe(stream);
+stream.pipe(this);
+return true
+}
+catch(e){return false}
+}}
 eventualIOconnection.prototype.fire = function(event, data) {
   this.listeners[event] && this.listeners[event].forEach(function(ev) {
     ev(data);
@@ -191,18 +215,20 @@ eventualIOconnection.prototype.close = function() {
 };
 
 var chatbot = (function() {
+//debugger;
   var commands = {},
     chatbotExport = {
       createCommand: createCommand,
       commands: commands,
       session: function() {
-        return { write: function(query) { read(query, this) }, bot: chatbotExport, send: function(t) { write(t, this) } }
+	  var asdf=new eventualIO(function(query){read(query, asdf)})
+	  
+        return Object.assign(asdf,{bot: chatbotExport, send: function(t) { write(t, this)}});
       }
     };
 
   function read(query, session) {
     var message;
-    session.in && session.in(query);
     if (typeof query == 'string') {
       message = query;
       session.currentUser = null;
@@ -254,11 +280,11 @@ var chatbot = (function() {
 }());
 var omegleBot = (function() {
   function write(t) {
-    this.context.sendMessage(t)
+    this.context&&this.context.sendMessage(t)
   }
   var userConnection = require('./userConnection.js');
-  var omegleConversation = { write: write, context: new userConnection(callback) }
-  new eventualIO(omegleConversation);
+  var omegleConversation = new eventualIO(write);
+  omegleConversation.context=new userConnection(callback);
   var captcha = null
 
   function captchad(user, challenge) {
@@ -338,7 +364,7 @@ var omegleBot = (function() {
 
 
 
-  return { startConversation: startConversation, disconnect: disconnect, cap: cap, send: send, ask: ask, event: omegleConversation.eventualIO.connect() };
+  return { startConversation: startConversation, disconnect: disconnect, cap: cap, send: send, ask: ask, event: omegleConversation.connect() };
 })
 
 workshopBot(chatbot, omegleBot);
@@ -348,23 +374,24 @@ function initializing() {
 
 
   //"connecting" to the chatbot
-  var ircChatbotConnection = new eventualIO(chatbot.session()).connect();
-  //on output direct to console.log (the console)
-  ircChatbotConnection.on('out', console.log.bind(console));
-  var irc = require('irc');
+  var ircChatbotConnection = chatbot.session().connect();
+  var irc=(function(){var irc = require('irc');
   var client = new irc.Client('irc.canternet.org', 'RainBot', {
     channels: ['#rgb'],
   });
-  ircChatbotConnection.on('out', function(msg) { client.say("#rgb", msg) });
-
+  
+  var ircio=new eventualIO(function(msg){client.say("#rgb", msg)})
   client.addListener('message', function(from, to, message) {
-    ircChatbotConnection.in({ message: message, user: from });
+    ircio.out({ message: message, user: from });
   });
   client.addListener('error', function(message) {
     console.log('error: ', message);
   });
-
-  var login = require("facebook-chat-api");
+  return ircio.connect();
+}())
+  irc.pipe(ircChatbotConnection);
+  ircChatbotConnection.pipe(irc);
+  /*var login = require("facebook-chat-api");
 
   // Create simple echo bot 
   login({
@@ -411,7 +438,7 @@ function initializing() {
       var chatbot2;
       if (!threads[message.threadID]) {
         threads[message.threadID] = {
-          chatbot: new eventualIO(chatbot.session()).connect()
+          chatbot: chatbot.session().connect()
         }
         threads[message.threadID].chatbot.on('out', function(msg) {
           api.sendMessage(msg, message.threadID);
@@ -428,9 +455,8 @@ function initializing() {
         })
       }
     })
-  })
-  var Discord = require("discord.io")
-  var DiscordchatbotConnection = new eventualIO(chatbot).connect();
+  })*/
+  /*  var Discord = require("discord.io");
   var bot = new Discord.Client({
     token: credentials.discordtoken,
     autorun: true
@@ -449,7 +475,7 @@ function initializing() {
     //console.log(user,userID,channelID,message)
     if (!discordChannels[channelID]) {
       discordChannels[channelID] = {
-        chatbot: new eventualIO(chatbot.session()).connect()
+        chatbot: chatbot.session().connect()
       }
       discordChannels[channelID].chatbot.on('out', function(msg) {
         bot.sendMessage({ to: channelID, message: msg })
@@ -460,6 +486,6 @@ function initializing() {
     discordChannels[channelID].chatbot.in({ message: message, user: user })
 
   });
-  //discord2 = bot;
+  //discord2 = bot;*/
 }
 initializing();
