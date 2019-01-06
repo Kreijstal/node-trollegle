@@ -418,7 +418,6 @@ function initializing() {
 
 
   //"connecting" to the chatbot
-<<<<<<< HEAD
   var ircChatbotConnection = chatbot.session().connect();
   var irc=(function(){var irc = require('irc');
   var client = new irc.Client('irc.canternet.org', 'RainBot', {
@@ -453,8 +452,6 @@ function initializing() {
       selfListen: true
     })
     var threads = {}
-=======
->>>>>>> 3fec4163d92ae8823aa9740a0474d695a0583379
 
   var irc = (function() {
     var irc = require('irc');
@@ -543,7 +540,6 @@ function initializing() {
         }
       })
     })
-<<<<<<< HEAD
   })
   /*  var Discord = require("discord.io");
   var bot = new Discord.Client({
@@ -554,15 +550,6 @@ function initializing() {
   bot.on('ready', function() {
     console.log('Logged in as %s - %s\n', bot.username, bot.id);
   });
-=======
-  }());
-  (function() {
-    var Discord = require("discord.io");
-    var bot = new Discord.Client({
-      token: credentials.discordtoken,
-      autorun: true
-    });
->>>>>>> 3fec4163d92ae8823aa9740a0474d695a0583379
 
     bot.on('ready', function() {
       console.log('Logged in as %s - %s\n', bot.username, bot.id);
