@@ -29,6 +29,24 @@ function workshopBot(chatbot, omeglebot) {
   chatbot.createCommand('hello', /(?:)/, function() {
     this.send('hello there ' + (this.currentUser ? this.currentUser : ""));
   });
+
+  (function() {
+    var streams = {}
+    chatbot.createCommand('saveChat', /(\S+)/, function(name) {
+
+      streams[name] = this.stream;
+    });
+
+    chatbot.createCommand('viewSavedChats', /(?:)/, function(name) {
+
+      this.send(JSON.stringify(Object.keys(streams)))
+    });
+
+    chatbot.createCommand('spyChat', /(\S+)/, function(name) {
+      streams[name].connect().pipe(JSON.stringify).pipe(this.stream.connect())
+    });
+
+  }())
   //creating the omegle command
   var omegleConnections;
   chatbot.createCommand('omegle', /(^(?:[^ ])+) ?(.*)/, function(command, rest) {
@@ -58,25 +76,27 @@ function workshopBot(chatbot, omeglebot) {
       that.omeglebotC.event.on('out', function(message) {
         that.send('(omegle)' + message);
       });
-	  if(inp){
-      var c = that.connect();
-      c.on('in', function(msg) {
-        var message, user;
-        if (typeof msg == 'string') {
-          message = msg;
-          user = null;
-        }
-        else {
-          message = msg.message;
-          user = msg.user;
-        }
-        if (message.indexOf('(omegle)') !== 0)
-          that.omeglebotC.event.in((user ? '<' + user + '>' : '') + message);
-      });
-	  }
+      if (inp) {
+        var c = that.stream.connect();
+        //  debugger;
+        c.on('out', function(msg) {
+          var message, user;
+          if (typeof msg == 'string') {
+            message = msg;
+            user = null;
+          } else {
+            message = msg.message;
+            user = msg.user;
+          }
+          if (message.indexOf('(omegle)') !== 0)
+            that.omeglebotC.event.in((user ? '<' + user + '>' : '') + message);
+        });
+      }
 
       that.omeglebotC.event.on('close', function() {
-       if(inp){ c.close();}
+        if (inp) {
+          c.close();
+        }
         that.state.consumeEvent("disconnect");
         that.omeglebotC = null;
       });
@@ -103,8 +123,7 @@ function workshopBot(chatbot, omeglebot) {
         default:
           this.send("The bot is currently connected, valid commands are: stop, solve, cap, restart")
       }
-    }
-    else if (that.state.getStatus() == "disconnected") {
+    } else if (that.state.getStatus() == "disconnected") {
       switch (command) {
         case 'restart':
         case 'start':
@@ -139,19 +158,24 @@ function multibotConnection() {
 function eventualIO(input) {
   var that = this;
   this.connections = [];
-  this.fire = function(event,data) { this[event](data) }//deprecated?
+  this.fire = function(event, data) {
+    this[event](data)
+  } //deprecated?
   this.input = function(inp) {
-    this.fire("in",inp);
+    this.fire("in", inp);
     input(inp);
   };
 }
-eventualIO.fromFunction=function(func){
-var e=new eventualIO(write);
-function write(data){e.out(func(data))}
-return e.connect();
-}
-(function(){
-var eventTypes = ['out', 'err', 'close', 'connect', 'in'];
+eventualIO.fromFunction = function(func) {
+  var e = new eventualIO(write);
+
+  function write(data) {
+    e.out(func(data))
+  }
+  return e.connect();
+};
+(function() {
+  var eventTypes = ['out', 'err', 'close', 'connect', 'in'];
   eventTypes.forEach(function(event) {
     eventualIO.prototype[event] = function(d) {
       this.connections.forEach(function(each) {
@@ -159,7 +183,7 @@ var eventTypes = ['out', 'err', 'close', 'connect', 'in'];
       });
     };
   });
-}())
+}());
 eventualIO.prototype.connect = function() {
   var con = new eventualIOconnection(this, {})
   this.connections.push(con);
@@ -181,26 +205,30 @@ eventualIOconnection.prototype.on = function(event, callback) {
   };
 };
 //callback will be called like the map function, the input of 1 stream will be the arguments of the callback and whatever the callback returns will be the output of the other stream
-eventualIOconnection.prototype.pipe = function(stream){
-if(typeof stream==="function"){
-stream=eventualIO.fromFunction(stream);
-}
-this.on("out",function(output){
- stream.in(output);
-})
-stream.on("close",function(){this.close()});
-return stream;
+eventualIOconnection.prototype.pipe = function(stream) {
+  if (typeof stream === "function") {
+    stream = eventualIO.fromFunction(stream);
+  }
+  this.on("out", function(output) {
+    stream.in(output);
+  })
+  stream.on("close", function() {
+    this.close()
+  });
+  return stream;
 }
 
-eventualIOconnection.prototype.bind = function(stream){
-if(stream.constructor==this.constructor){
-try{
-this.pipe(stream);
-stream.pipe(this);
-return true
+eventualIOconnection.prototype.bind = function(stream) {
+  if (stream.constructor == this.constructor) {
+    try {
+      this.pipe(stream);
+      stream.pipe(this);
+      return true
+    } catch (e) {
+      return false
+    }
+  }
 }
-catch(e){return false}
-}}
 eventualIOconnection.prototype.fire = function(event, data) {
   this.listeners[event] && this.listeners[event].forEach(function(ev) {
     ev(data);
@@ -215,15 +243,24 @@ eventualIOconnection.prototype.close = function() {
 };
 
 var chatbot = (function() {
-//debugger;
+  //debugger;
   var commands = {},
     chatbotExport = {
       createCommand: createCommand,
       commands: commands,
-      session: function() {
-	  var asdf=new eventualIO(function(query){read(query, asdf)})
-	  
-        return Object.assign(asdf,{bot: chatbotExport, send: function(t) { write(t, this)}});
+      session: function(stream) {
+        var streamC = stream.connect();
+        var asdf = {
+          bot: chatbotExport,
+          send: function(data) {
+            streamC.in(data)
+          },
+          stream: stream
+        }
+        streamC.on("out", function(data) {
+          read(data, asdf)
+        })
+        return asdf;
       }
     };
 
@@ -232,8 +269,7 @@ var chatbot = (function() {
     if (typeof query == 'string') {
       message = query;
       session.currentUser = null;
-    }
-    else {
+    } else {
       message = query.message;
       session.currentUser = query.user;
     }
@@ -243,19 +279,10 @@ var chatbot = (function() {
       var e;
       try {
         callCommand(parseResult[1], message.substring(parseResult[1].length + 2), session);
-      }
-      catch (e) {
+      } catch (e) {
         session.send("Error in command (" + message + "):" + e);
       }
     }
-  }
-
-  function write(a, session) {
-    if (!(session && session.out)) {
-      console.error('Output not set');
-      return;
-    }
-    else session.out(a);
   }
 
   function callCommand(command, parameters, session) {
@@ -280,11 +307,11 @@ var chatbot = (function() {
 }());
 var omegleBot = (function() {
   function write(t) {
-    this.context&&this.context.sendMessage(t)
+    omegleConversation.context && omegleConversation.context.sendMessage(t)
   }
   var userConnection = require('./userConnection.js');
   var omegleConversation = new eventualIO(write);
-  omegleConversation.context=new userConnection(callback);
+  omegleConversation.context = new userConnection(callback);
   var captcha = null
 
   function captchad(user, challenge) {
@@ -292,34 +319,36 @@ var omegleBot = (function() {
     captcha = (new(require('./captchaDialog.js'))(challenge, user.id));
   }
 
-  function say(t) { omegleConversation.out(t) }
+  function say(t) {
+    omegleConversation.out(t)
+  }
 
   function callback(event, b) {
     if (event == "close") {
       omegleConversation.close()
-    }
-    else if (event == "error") {
+    } else if (event == "error") {
       say("Error: " + b);
-    }
-    else if (event == "serverMessage") {
+    } else if (event == "serverMessage") {
       say("Server: " + b);
-    }
-    else if (event == "captcha") {
+    } else if (event == "captcha") {
       captchad(omegleConversation.context, b);
-    }
-    else if (event == "ban") {
+    } else if (event == "ban") {
       say("I've been banned from omegle, server response: " + b);
       omegleConversation.close();
-    }
-    else if (event == "connected" && b === null) { say("Stranger has connected" + (omegleConversation.context.question ? ", question: " + omegleConversation.context.question : ".")) }
-    else if (event === "message") { say("Stranger:" + b) }
-    else if (event == "spyMessage") { say(b[0] + ":" + b[1]) }
-    else if (event == "spyDisconnected") {
+    } else if (event == "connected" && b === null) {
+      say("Stranger has connected" + (omegleConversation.context.question ? ", question: " + omegleConversation.context.question : "."))
+    } else if (event === "message") {
+      say("Stranger:" + b)
+    } else if (event == "spyMessage") {
+      say(b[0] + ":" + b[1])
+    } else if (event == "spyDisconnected") {
       say(b[0] + " has disconnected.");
       omegleConversation.close()
+    } else if (event == "disconnected") {
+      say("Stranger has disconnected.");
+    } else {
+      console.log(arguments)
     }
-    else if (event == "disconnected") { say("Stranger has disconnected."); }
-    else { console.log(arguments) }
   }
 
   function disconnect() {
@@ -328,7 +357,9 @@ var omegleBot = (function() {
   }
 
   function startConversation(spy, lang, interests) {
-    if (captcha) { return null }
+    if (captcha) {
+      return null
+    }
     omegleConversation.context.questionMode = spy;
     lang && (omegleConversation.context.lang = lang)
     omegleConversation.context.topics = undefined;
@@ -337,7 +368,9 @@ var omegleBot = (function() {
   }
 
   function ask(question, lang) {
-    if (captcha) { return null }
+    if (captcha) {
+      return null
+    }
     lang && (omegleConversation.context.lang = lang)
     omegleConversation.context.ask = question
     omegleConversation.context.init();
@@ -345,26 +378,37 @@ var omegleBot = (function() {
 
   function cap() {
     if (captcha) {
-      if (!omegleConversation) { captcha = null; return }
+      if (!omegleConversation) {
+        captcha = null;
+        return
+      }
       captcha.update().then(function() {
         say("captcha is :" + captcha.getImageUrl());
       })
-    }
-    else if (omegleConversation) {
+    } else if (omegleConversation) {
       say("There is no captcha to solve");
     }
   }
 
   function send(secret) {
     if (captcha) captcha.send(secret).then(function(b) {
-      if (!b) { say("incorrect captcha!") }
+      if (!b) {
+        say("incorrect captcha!")
+      }
     });
   }
 
 
 
 
-  return { startConversation: startConversation, disconnect: disconnect, cap: cap, send: send, ask: ask, event: omegleConversation.connect() };
+  return {
+    startConversation: startConversation,
+    disconnect: disconnect,
+    cap: cap,
+    send: send,
+    ask: ask,
+    event: omegleConversation.connect()
+  };
 })
 
 workshopBot(chatbot, omegleBot);
@@ -374,6 +418,7 @@ function initializing() {
 
 
   //"connecting" to the chatbot
+<<<<<<< HEAD
   var ircChatbotConnection = chatbot.session().connect();
   var irc=(function(){var irc = require('irc');
   var client = new irc.Client('irc.canternet.org', 'RainBot', {
@@ -408,53 +453,97 @@ function initializing() {
       selfListen: true
     })
     var threads = {}
+=======
+>>>>>>> 3fec4163d92ae8823aa9740a0474d695a0583379
 
-    function getNicks(threadId) {
-      if (threads[threadId] && threads[threadId].nicks) {
-        return Promise.resolve(threads[threadId].nicks);
-      }
-      else {
-        return new Promise(function(resolve) {
-          api.getThreadInfo(threadId, function(gfdfg, b) {
-            resolve(threads[threadId].nicks = b.nicknames || {});
-          })
-        })
-      }
-    }
+  var irc = (function() {
+    var irc = require('irc');
+    var client = new irc.Client('irc.canternet.org', 'RainBot', {
+      channels: ['#rgb'],
+    });
 
-    function getNick(id, threadId) {
-      return getNicks(threadId).then(function(nicks) {
-        if (nicks[id]) return nicks[id];
-        else return new Promise(function(resolve) {
-          api.getUserInfo(id, function(err, result) {
-            resolve(nicks[id] = result[id].vanity || result[id].firstName)
-          })
-        })
-      })
-    }
-    api.listen((err, message) => {
-   
-      if (err) return console.error("ERROR", err)
-      var chatbot2;
-      if (!threads[message.threadID]) {
-        threads[message.threadID] = {
-          chatbot: chatbot.session().connect()
-        }
-        threads[message.threadID].chatbot.on('out', function(msg) {
-          api.sendMessage(msg, message.threadID);
-        })
-      }
-      chatbot2 = threads[message.threadID].chatbot;
-
-      if (message && message.body) {
-        getNick(message.senderID, message.threadID).then(function(user) {
-          chatbot2.in({
-            message: message.body,
-            user: user
-          })
-        })
-      }
+    var ircio = new eventualIO(function(msg) {
+      client.say("#rgb", msg)
     })
+    client.addListener('message', function(from, to, message) {
+      ircio.out({
+        message: message,
+        user: from
+      });
+    });
+    client.addListener('error', function(message) {
+      console.log('error: ', message);
+    });
+    return ircio;
+  }())
+  chatbot.session(irc);
+  (function() {
+    var login = require("facebook-chat-api");
+
+    // Create simple echo bot 
+    login({
+      email: credentials.fbemail,
+      password: credentials.fbpassword
+    }, (err, api) => {
+      api2 = api
+
+      if (err) {
+        console.error(err, "IT HAS ERRORED");
+        return;
+      }
+      api.setOptions({
+        selfListen: true
+      })
+      var threads = {}
+
+      function getNicks(threadId) {
+        if (threads[threadId] && threads[threadId].nicks) {
+          return Promise.resolve(threads[threadId].nicks);
+        } else {
+          return new Promise(function(resolve) {
+            api.getThreadInfo(threadId, function(gfdfg, b) {
+              resolve(threads[threadId].nicks = b.nicknames || {});
+            })
+          })
+        }
+      }
+
+      function getNick(id, threadId) {
+        return getNicks(threadId).then(function(nicks) {
+          if (nicks[id]) return nicks[id];
+          else return new Promise(function(resolve) {
+            api.getUserInfo(id, function(err, result) {
+              resolve(nicks[id] = result[id].vanity || result[id].firstName)
+            })
+          })
+        })
+      }
+      api.listen((err, message) => {
+
+        if (err) return console.error("ERROR", err)
+        var chatbot2;
+        if (!threads[message.threadID]) {
+          var threadlol = new eventualIO(function(msg) {
+            api.sendMessage(msg, message.threadID);
+          })
+          threads[message.threadID] = {
+            chatbot: threadlol
+          }
+          chatbot.session(threadlol);
+        }
+        chatbot2 = threads[message.threadID].chatbot;
+
+        if (message && message.body) {
+          getNick(message.senderID, message.threadID).then(function(user) {
+            chatbot2.out({
+              message: message.body,
+              user: user
+            })
+          })
+        }
+      })
+    })
+<<<<<<< HEAD
   })
   /*  var Discord = require("discord.io");
   var bot = new Discord.Client({
@@ -465,27 +554,45 @@ function initializing() {
   bot.on('ready', function() {
     console.log('Logged in as %s - %s\n', bot.username, bot.id);
   });
+=======
+  }());
+  (function() {
+    var Discord = require("discord.io");
+    var bot = new Discord.Client({
+      token: credentials.discordtoken,
+      autorun: true
+    });
+>>>>>>> 3fec4163d92ae8823aa9740a0474d695a0583379
 
-  DiscordchatbotConnection.on("out", function(msg) {
+    bot.on('ready', function() {
+      console.log('Logged in as %s - %s\n', bot.username, bot.id);
+    });
 
 
-  })
-  var discordChannels = {}
-  bot.on('message', function(user, userID, channelID, message, event) {
-    //console.log(user,userID,channelID,message)
-    if (!discordChannels[channelID]) {
-      discordChannels[channelID] = {
-        chatbot: chatbot.session().connect()
+    var discordChannels = {}
+    bot.on('message', function(user, userID, channelID, message, event) {
+      //console.log(user,userID,channelID,message)
+      if (!discordChannels[channelID]) {
+        var channellol = new eventualIO(function(msg) {
+          bot.sendMessage({
+            to: channelID,
+            message: msg
+          })
+        });
+        discordChannels[channelID] = {
+          chatbot: channellol //chatbot.session().connect()
+        }
+        chatbot.session(channellol);
       }
-      discordChannels[channelID].chatbot.on('out', function(msg) {
-        bot.sendMessage({ to: channelID, message: msg })
+
+      //console.log("THIS WAS EXECUTED2")
+      discordChannels[channelID].chatbot.out({
+        message: message,
+        user: user
       })
-    }
 
-    //console.log("THIS WAS EXECUTED2")
-    discordChannels[channelID].chatbot.in({ message: message, user: user })
-
-  });
-  //discord2 = bot;*/
+    });
+    //discord2 = bot;*/
+  }())
 }
 initializing();
