@@ -391,7 +391,7 @@ function initializing() {
 }())
   irc.pipe(ircChatbotConnection);
   ircChatbotConnection.pipe(irc);
-  /*var login = require("facebook-chat-api");
+  var login = require("facebook-chat-api");
 
   // Create simple echo bot 
   login({
@@ -455,7 +455,7 @@ function initializing() {
         })
       }
     })
-  })*/
+  })
   /*  var Discord = require("discord.io");
   var bot = new Discord.Client({
     token: credentials.discordtoken,

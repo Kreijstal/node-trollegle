@@ -333,9 +333,24 @@ function parse(parserSteppers, grammar, textToParse, parseContext, final, timeOu
       if (type === "object") {
         stepper = stepper[match.context.type];
       }
-      //coolTree=(function coolTree(){var ppapa="";parseContext.root.forEach(function(i,ii){    var t=getType(i.data.context);    if(i.data=="root"){t="root"}else if(t=="object"){        t=i.data.context.type;    }    i.string=ii+","+i.data.restore+": "+t+(t=="array"?" length:"+i.data.context.length+" iterator:"+i.data.iterator:"")+(t=="or"?" choices:"+i.data.context.choices.length+" iterator:"+i.data.iterator:"")+(t=="string"?":"+i.data.context:"")+(t=="pointer"?":"+i.data.context.value:"")+(t=="repetition"?", reps:"+(i.data.matches&&i.data.matches.length)+" "+i.data.context.quantifier:"");    if(i.parent&&i.parent.string)  ppapa+=JSON.stringify(i.parent.string)+"->"+JSON.stringify(i.string)+";\n";});return ppapa})
-      if(match.indexOf==9){
-        throw new Error('gay')
+      //coolTree=(function(){var ppapa="";parseContext.root.forEach(function(i,ii){    var t=getType(i.data.context);    if(i.data=="root"){t="root"}else if(t=="object"){        t=i.data.context.type;    }    i.string=ii+","+i.data.restore+": "+t+(t=="array"?" length:"+i.data.context.length+" iterator:"+i.data.iterator:"")+(t=="or"?" choices:"+i.data.context.choices.length+" iterator:"+i.data.iterator:"")+(t=="string"?":"+i.data.context:"")+(t=="pointer"?":"+i.data.context.value:"")+(t=="repetition"?", reps:"+(i.data.matches&&i.data.matches.length)+" "+i.data.context.quantifier:"");    if(i.parent&&i.parent.string)  ppapa+=JSON.stringify(i.parent.string)+"->"+JSON.stringify(i.string)+";\n";});return ppapa})
+      function getResult(v){if(!v){return null}var m=[];m.push(v.data.result);if(v.children){m=m.concat(getResult(v.children[v.children.length-1]))};return m}
+      coolTree2=(function(){
+var ppapa="";parseContext.root.forEach(function(i,ii){
+    
+    var t=getType(i.data.context)
+    if(i.data=="root"){t="root"}else if(t=="object"){
+        t=i.data.context.type
+    }
+    i.string=i.data.restore+": "+t+(t=="array"?" length:"+i.data.context.length+" iterator:"+i.data.iterator:"")+(t=="or"?" choices:"+i.data.context.choices.length+" iterator:"+i.data.iterator:"")+(t=="string"?":"+i.data.context:"")+(t=="pointer"?":"+i.data.context.value:"")+(t=="repetition"?", reps:"+(i.data.matches&&i.data.matches.length)+" "+i.data.context.quantifier:"");
+    
+    ppapa+=Array.apply(this,Array(ii)).map(function(){return "│   "}).join('')+"├──"+JSON.stringify(i.string)+"\n"
+});return "Rollbacktree:"+ppapa+"\nLastResult:"+getResult(parseContext.root).join()})
+
+
+
+      if(match.indexOf>textToParse.length){
+        throw new Error('This should never happen')
       }
       nextParseInstruction = stepper(match, textToParse);
       parseContext.reverse=match.reverse;
@@ -345,7 +360,7 @@ function parse(parserSteppers, grammar, textToParse, parseContext, final, timeOu
       //different instructions!
       switch (nextParseInstruction[0]) {
         case parse.THROW:
-          console.error(nextParseInstruction[1])
+          if(parse.verbose)console.error(nextParseInstruction[1])
           match.failMsg=nextParseInstruction[1]
           stepOutProcedure(true, match);
           continue;
@@ -364,17 +379,20 @@ function parse(parserSteppers, grammar, textToParse, parseContext, final, timeOu
           stepOutProcedure(false);
           break;
         case parse.HALT:
-          console.log("parser halted")
+          if(parse.verbose)console.log("parser halted")
           break mainloop;
           break;
       }
       continue;
     } while (parseContext.stepInfo.data!=="root");
+    parseContext.result=parseContext.root.getLastChild().data.result
+    parseContext.fail=!!parseContext.root.getLastChild().data.fail
+    //debugger;
   return parseContext;
 }
 var metachars = ["[", "(", ")", "+", "?", ".", "*"]
 var regexGrammar = {
-  regex: [{ type: "repetition", to: 1, from: 0, quantifier: "greedy", child: "^" },{ type: "repetition", to: Infinity, from: 0, quantifier: "lazy", child: { type: "or", choices: [/*{ type: "pointer", value: "group" }, { type: "pointer", value: "wildcard" }, { type: "pointer", value: "escape" }, { type: "pointer", value: "special" },*/ wildcardToken("Anything")] } }, { type: "repetition", to: 1, from: 0, quantifier: "greedy", child: "$" }],
+  regex: [{ type: "repetition", to: 1, from: 0, quantifier: "greedy", child: "^" },{ type: "repetition", to: Infinity, from: 0, quantifier: "lazy", child: { type: "or", choices: [{ type: "pointer", value: "group" }, { type: "pointer", value: "wildcard" }, { type: "pointer", value: "escape" }, { type: "pointer", value: "special" }, wildcardToken("Anything")] } }, { type: "repetition", to: 1, from: 0, quantifier: "greedy", child: "$" }],
   wildcard: ["[", {
     type: "repetition",
     to: Infinity,
@@ -415,6 +433,7 @@ function wildcardToken(type, negative) {
       break;
   }
 }
+parse.verbose=false;
 parse.STEP_OUT = 1
 parse.STEP_IN = 2
 parse.RemoveNode = 6;
@@ -672,5 +691,5 @@ var expressionFeatures = {
   },
   null: function() { return [parse.THROW, "attempted to match null"] }
 }
-debugger;
+
 parse(expressionFeatures, regexGrammar, "/hell" + "o/");
