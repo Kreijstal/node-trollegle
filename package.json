@@ -9,7 +9,7 @@
     "facebook-chat-api": "^1.4.0",
     "irc": "^0.5.2",
     "request": "^2.83.0",
-    "viz.js": "^1.8.0"
+    "viz.js": "^2.0.0"
   },
   "devDependencies": {},
   "scripts": {
